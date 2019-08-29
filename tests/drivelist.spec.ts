@@ -15,9 +15,6 @@
  */
 
 import { ok } from 'assert';
-import { expect } from 'chai';
-import * as os from 'os';
-import { stub } from 'sinon';
 
 import { list } from '../lib';
 
@@ -81,30 +78,6 @@ describe('Drivelist', () => {
 					device.isUAS === null || typeof device.isUAS === 'boolean',
 					`Invalid isUAS flag: ${device.isUAS}`,
 				);
-			});
-		});
-
-		describe('given an unsupported os', () => {
-			beforeEach(() => {
-				this.osPlatformStub = stub(os, 'platform');
-				this.osPlatformStub.returns('foobar');
-			});
-
-			afterEach(() => {
-				this.osPlatformStub.restore();
-			});
-
-			it('should yield an unsupported error', async () => {
-				try {
-					await list();
-				} catch (error) {
-					expect(error).to.be.an.instanceof(Error);
-					expect(error.message).to.equal(
-						'Your OS is not supported by this module: foobar',
-					);
-					return;
-				}
-				ok(false, 'Expected error not thrown');
 			});
 		});
 	});
