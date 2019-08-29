@@ -35,7 +35,7 @@
     "prebuild-release": "prebuild --all --strip",
     "prepublishOnly": "npm run build-ts && npm run readme"
   },
-  "author": "Juan Cruz Viotti <juan@balena.io>",
+  "author": "Martin James <martin.james@syndicats.de>",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=6"
