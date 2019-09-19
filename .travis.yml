@@ -34,7 +34,7 @@ addons:
 notifications:
   email: false
 deploy:
-  skip_cleanup: false
+  skip_cleanup: true
   provider: script
   script: ./ci/prebuild-publish.sh
   on:
