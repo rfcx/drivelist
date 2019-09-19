@@ -1,8 +1,7 @@
 language: node_js
 node_js:
+  - 12
   - 10
-  - 8
-  - 6
 os:
   - linux
   - osx
@@ -34,6 +33,6 @@ deploy:
   provider: script
   script: ./ci/prebuild-publish.sh
   on:
-    node: 10
+    node: 12
     tags: true
     branch: master
