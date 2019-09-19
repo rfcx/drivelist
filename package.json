@@ -25,7 +25,6 @@
     "test": "mocha -r ts-node/register tests/**/*.spec.ts -R spec",
     "lint": "npm run lint-cpp",
     "lint-cpp": "cpplint --recursive src",
-    "prettier": "prettier --config ./node_modules/resin-lint/config/.prettierrc --write \"lib/**/*.ts\"  \"tests/**/*.ts\"",
     "readme": "jsdoc2md --template doc/README.hbs js/index.js > README.md",
     "configure": "node-gyp configure",
     "build": "node-gyp rebuild",
