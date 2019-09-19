@@ -34,7 +34,7 @@
   "author": "Maximilien DERRIER <max.derrier@lelivrescolaire.fr>",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=12"
+    "node": ">=10"
   },
   "binary": {
     "module_name": "drivelist",
