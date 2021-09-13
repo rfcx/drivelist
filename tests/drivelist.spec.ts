@@ -15,6 +15,9 @@
  */
 
 import { ok } from 'assert';
+import { expect } from 'chai';
+import * as os from 'os';
+import { stub } from 'sinon';
 
 import { list } from '../lib';
 
@@ -22,12 +25,15 @@ describe('Drivelist', () => {
 	describe('.list()', () => {
 		it('should yield results', async () => {
 			const devices = await list();
-			devices.forEach(device => {
+			devices.forEach((device) => {
 				ok(device.enumerator, `Invalid enumerator: ${device.enumerator}`);
 				ok(device.busType, `Invalid busType: ${device.busType}`);
 				ok(device.device, `Invalid device: ${device.device}`);
 				ok(device.raw, `Invalid raw: ${device.raw}`);
-				ok(device.description, `Invalid description: ${device.description}`);
+				ok(
+					typeof device.description === 'string',
+					`Invalid description: ${device.description}`,
+				);
 				ok(device.error === null, `Invalid error: ${device.error}`);
 				ok(
 					device.size === null || Number.isFinite(device.size),
@@ -78,6 +84,33 @@ describe('Drivelist', () => {
 					device.isUAS === null || typeof device.isUAS === 'boolean',
 					`Invalid isUAS flag: ${device.isUAS}`,
 				);
+			});
+		});
+
+		describe('given an unsupported os', () => {
+			beforeEach(() => {
+				// @ts-ignore
+				this.osPlatformStub = stub(os, 'platform');
+				// @ts-ignore
+				this.osPlatformStub.returns('foobar');
+			});
+
+			afterEach(() => {
+				// @ts-ignore
+				this.osPlatformStub.restore();
+			});
+
+			it('should yield an unsupported error', async () => {
+				try {
+					await list();
+				} catch (error) {
+					expect(error).to.be.an.instanceof(Error);
+					expect(error.message).to.equal(
+						'Your OS is not supported by this module: foobar',
+					);
+					return;
+				}
+				ok(false, 'Expected error not thrown');
 			});
 		});
 	});
