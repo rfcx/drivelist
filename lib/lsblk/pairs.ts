@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import { getPartitionTableType } from '.';
 import { Drive, Mountpoint } from '..';
 
 interface Dict<T> {
@@ -45,7 +47,10 @@ function parseLsblkLine(line: string): Dict<string> {
 				throw new Error(`Expected '"', saw "${line[offset]}"`);
 			}
 			offset += 1;
-			while (line[offset] !== '"' && line[offset - 1] !== escape) {
+			while (
+				line[offset - 1] === escape ||
+				(line[offset - 1] !== escape && line[offset] !== '"')
+			) {
 				value += line[offset];
 				offset += 1;
 			}
@@ -71,16 +76,13 @@ function parseLsblkLine(line: string): Dict<string> {
 }
 
 function parseLsblk(output: string): Array<Dict<string>> {
-	return output
-		.trim()
-		.split(/\r?\n/g)
-		.map(parseLsblkLine);
+	return output.trim().split(/\r?\n/g).map(parseLsblkLine);
 }
 
 function consolidate(
 	devices: Array<Dict<string>>,
 ): Array<Dict<string> & { mountpoints: Mountpoint[] }> {
-	const primaries = devices.filter(device => {
+	const primaries = devices.filter((device) => {
 		return (
 			device.type === 'disk' &&
 			!device.name.startsWith('ram') &&
@@ -88,16 +90,16 @@ function consolidate(
 		);
 	});
 
-	return primaries.map(device => {
+	return primaries.map((device) => {
+		const children = devices.filter((child) => {
+			return (
+				['disk', 'part'].includes(child.type) &&
+				child.name.startsWith(device.name)
+			);
+		});
 		return Object.assign({}, device, {
-			mountpoints: devices
-				.filter(child => {
-					return (
-						['disk', 'part'].includes(child.type) &&
-						child.mountpoint &&
-						child.name.startsWith(device.name)
-					);
-				})
+			mountpoints: children
+				.filter((child) => child.mountpoint)
 				.map(
 					(child): Mountpoint => {
 						return {
@@ -120,10 +122,10 @@ function getDescription(
 	];
 	if (device.mountpoints.length) {
 		let subLabels = device.mountpoints
-			.filter(c => {
+			.filter((c) => {
 				return (c.label && c.label !== device.label) || c.path;
 			})
-			.map(c => {
+			.map((c) => {
 				return c.label || c.path;
 			});
 		subLabels = Array.from(new Set(subLabels));
@@ -131,17 +133,18 @@ function getDescription(
 			description.push(`(${subLabels.join(', ')})`);
 		}
 	}
-	return description
-		.join(' ')
-		.replace(/\s+/g, ' ')
-		.trim();
+	return description.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 export function parse(stdout: string): Drive[] {
 	const devices = consolidate(parseLsblk(stdout));
 
 	return devices.map(
-		(device: Dict<string> & { mountpoints: Mountpoint[] }): Drive => {
+		(
+			device: Dict<string> & {
+				mountpoints: Mountpoint[];
+			},
+		): Drive => {
 			const isVirtual = device.subsystems
 				? /^block$/i.test(device.subsystems)
 				: null;
@@ -176,6 +179,9 @@ export function parse(stdout: string): Drive[] {
 				isSCSI,
 				isUSB,
 				isUAS: null,
+				partitionTableType: getPartitionTableType(
+					device.pttype as 'gpt' | 'dos' | undefined,
+				),
 			};
 		},
 	);

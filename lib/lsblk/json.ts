@@ -16,6 +16,7 @@
 
 import { posix } from 'path';
 
+import { getPartitionTableType } from '.';
 import { Drive, Mountpoint } from '..';
 
 interface LsblkJsonOutput {
@@ -39,6 +40,7 @@ interface LsblkJsonOutputDevice {
 	subsystems?: string;
 	tran?: string;
 	vendor: string | null;
+	pttype?: 'gpt' | 'dos';
 }
 
 interface LsblkJsonOutputDeviceChild {
@@ -51,10 +53,10 @@ function getMountpoints(
 	children: Array<LsblkJsonOutputDeviceChild | LsblkJsonOutputDevice>,
 ): Mountpoint[] {
 	return children
-		.filter(child => {
+		.filter((child) => {
 			return child.mountpoint;
 		})
-		.map(child => {
+		.map((child) => {
 			return {
 				path: child.mountpoint!,
 				label: child.label || child.partlabel,
@@ -70,17 +72,14 @@ function getDescription(device: LsblkJsonOutputDevice): string {
 	];
 	if (device.children) {
 		let subLabels = device.children
-			.filter(c => (c.label && c.label !== device.label) || c.mountpoint)
-			.map(c => c.label || c.mountpoint);
+			.filter((c) => (c.label && c.label !== device.label) || c.mountpoint)
+			.map((c) => c.label || c.mountpoint);
 		subLabels = Array.from(new Set(subLabels));
 		if (subLabels.length) {
 			description.push(`(${subLabels.join(', ')})`);
 		}
 	}
-	return description
-		.join(' ')
-		.replace(/\s+/g, ' ')
-		.trim();
+	return description.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function resolveDeviceName(name?: string): string | null {
@@ -95,14 +94,14 @@ function resolveDeviceName(name?: string): string | null {
 
 export function transform(data: LsblkJsonOutput): Drive[] {
 	return data.blockdevices
-		.map(device =>
+		.map((device) =>
 			Object.assign({}, device, {
 				name: resolveDeviceName(device.name),
 				kname: resolveDeviceName(device.kname),
 			}),
 		)
 		.filter(
-			device =>
+			(device) =>
 				// Omit loop devices, CD/DVD drives, and RAM
 				!device.name.startsWith('/dev/loop') &&
 				!device.name.startsWith('/dev/sr') &&
@@ -145,6 +144,7 @@ export function transform(data: LsblkJsonOutput): Drive[] {
 					isSCSI,
 					isUSB,
 					isUAS: null,
+					partitionTableType: getPartitionTableType(device.pttype),
 				};
 			},
 		);

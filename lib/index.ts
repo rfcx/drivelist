@@ -18,68 +18,96 @@
  * @module drivelist
  */
 
-import bindings = require('bindings');
-import { platform } from 'os';
-
-import { lsblk } from './lsblk';
-
-export interface Mountpoint {
-	path: string;
-	label: string | null;
-}
-
-export interface Drive {
-	blockSize: number;
-	busType: string;
-	busVersion: null;
-	description: string;
-	device: string;
-	devicePath: string | null;
-	enumerator: string;
-	error: null;
-	isCard: null;
-	isReadOnly: boolean;
-	isRemovable: boolean;
-	isSCSI: boolean | null;
-	isSystem: boolean;
-	isUAS: null;
-	isUSB: boolean | null;
-	isVirtual: boolean | null;
-	logicalBlockSize: number;
-	mountpoints: Mountpoint[];
-	raw: string;
-	size: number | null;
-}
-
-/**
- * @summary List available drives
- * @function
- * @public
- *
- * @returns {Promise} <Drive>[]
- *
- * @example
- * const drivelist = require('drivelist');
- *
- * const drives = await drivelist.list();
- * drives.forEach((drive) => {
- *   console.log(drive);
- * });
- */
-export async function list(): Promise<Drive[]> {
-	const plat = platform();
-	if (plat === 'win32' || plat === 'darwin') {
-		return new Promise((resolve, reject) => {
-			bindings('drivelist').list((error: Error, drives: Drive[]) => {
-				if (error != null) {
-					reject(error);
-				} else {
-					resolve(drives);
-				}
-			});
-		});
-	} else if (plat === 'linux') {
-		return await lsblk();
-	}
-	throw new Error(`Your OS is not supported by this module: ${platform()}`);
-}
+ import bindings = require('bindings');
+ import { platform } from 'os';
+ 
+ import { lsblk } from './lsblk';
+ 
+ export interface Mountpoint {
+	 path: string;
+	 label: string | null;
+ }
+ 
+ export interface Drive {
+	 blockSize: number;
+	 busType: string;
+	 busVersion: null;
+	 description: string;
+	 device: string;
+	 devicePath: string | null;
+	 enumerator: string;
+	 error: null;
+	 isCard: null;
+	 isReadOnly: boolean;
+	 isRemovable: boolean;
+	 isSCSI: boolean | null;
+	 isSystem: boolean;
+	 isUAS: null;
+	 isUSB: boolean | null;
+	 isVirtual: boolean | null;
+	 logicalBlockSize: number;
+	 mountpoints: Mountpoint[];
+	 raw: string;
+	 size: number | null;
+	 partitionTableType: 'mbr' | 'gpt' | null;
+ }
+ 
+ const drivelistBindings = bindings('drivelist');
+ 
+ function bindingsList(): Promise<Drive[]> {
+	 return new Promise((resolve, reject) => {
+		 drivelistBindings.list((error: Error, drives: Drive[]) => {
+			 if (error != null) {
+				 reject(error);
+			 } else {
+				 resolve(drives);
+			 }
+		 });
+	 });
+ }
+ 
+ function handleApfs(disks: Drive[]): void {
+	 const apfs: Drive[] = [];
+	 const other: Drive[] = [];
+	 for (const disk of disks) {
+		 if (disk.description === 'AppleAPFSMedia') {
+			 apfs.push(disk);
+		 } else {
+			 other.push(disk);
+		 }
+	 }
+	 for (const disk of apfs) {
+		 const source = other.find(
+			 (d) => d.devicePath === disk.devicePath && !d.isVirtual,
+		 );
+		 if (source !== undefined) {
+			 source.mountpoints.push(...disk.mountpoints);
+			 disk.isVirtual = true;
+		 }
+	 }
+ }
+ 
+ /**
+	* @summary List available drives
+	*
+	* @example
+	* const drivelist = require('drivelist');
+	*
+	* const drives = await drivelist.list();
+	* drives.forEach((drive) => {
+	*   console.log(drive);
+	* });
+	*/
+ export async function list(): Promise<Drive[]> {
+	 const plat = platform();
+	 if (plat === 'win32') {
+		 return await bindingsList();
+	 } else if (plat === 'darwin') {
+		 const disks = await bindingsList();
+		 handleApfs(disks);
+		 return disks;
+	 } else if (plat === 'linux') {
+		 return await lsblk();
+	 }
+	 throw new Error(`Your OS is not supported by this module: ${platform()}`);
+ }
