@@ -54,6 +54,7 @@ for:
   - matrix:
       only:
         - image: macos
+        - platform: x64
         - fast_finish: true
     environment:
       CCACHE_TEMPDIR: /tmp/.ccache-temp
