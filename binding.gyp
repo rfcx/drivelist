@@ -16,6 +16,8 @@
       "defines": [
         "NAPI_CPP_EXCEPTIONS"
       ],
+      'cflags!': [ '-fno-exceptions' ],
+      'cflags_cc!': [ '-fno-exceptions' ],
       "msvs_settings": {
         "VCLinkerTool": {
           "SetChecksum": "true"
@@ -30,6 +32,7 @@
       "conditions": [
         [ 'OS=="mac"', {
           "xcode_settings": {
+            "GCC_ENABLE_CPP_EXCEPTIONS": "yes",
             "OTHER_CPLUSPLUSFLAGS": [
               "-stdlib=libc++"
             ],
