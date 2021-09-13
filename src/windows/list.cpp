@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <wchar.h>
 #include <string>
 #include <vector>
 #include <set>
@@ -35,30 +36,30 @@
 
 namespace Drivelist {
 
-char* WCharToUtf8(const wchar_t* wstr) {
-  char *str = NULL;
-  size_t size = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
-
-  if (size <= 1) {
-    return NULL;
+std::string WCharToUtf8String(const wchar_t* wstr) {
+  if (!wstr) {
+    return std::string();
   }
 
-  if ((str = reinterpret_cast<char*>(calloc(size, 1))) == NULL) {
-    return NULL;
+  int wstrSize = static_cast<int>(wcslen(wstr));
+  int size = WideCharToMultiByte(
+    CP_UTF8, 0, wstr, wstrSize, NULL, 0, NULL, NULL);
+  if (!size) {
+    return std::string();
   }
 
-  size_t utf8Size = WideCharToMultiByte(
-    CP_UTF8, 0, wstr, -1, str, size, NULL, NULL);
-
+  std::string result(size, 0);
+  int utf8Size = WideCharToMultiByte(
+    CP_UTF8, 0, wstr, wstrSize, &result[0], size, NULL, NULL);
   if (utf8Size != size) {
-    free(str);
-    return NULL;
+    return std::string();
   }
 
-  return str;
+  return result;
 }
 
-char* GetEnumeratorName(HDEVINFO hDeviceInfo, SP_DEVINFO_DATA deviceInfoData) {
+std::string GetEnumeratorName(HDEVINFO hDeviceInfo,
+  SP_DEVINFO_DATA deviceInfoData) {
   char buffer[MAX_PATH];
 
   ZeroMemory(&buffer, sizeof(buffer));
@@ -67,7 +68,7 @@ char* GetEnumeratorName(HDEVINFO hDeviceInfo, SP_DEVINFO_DATA deviceInfoData) {
     hDeviceInfo, &deviceInfoData, SPDRP_ENUMERATOR_NAME,
     NULL, (LPBYTE) buffer, sizeof(buffer), NULL);
 
-  return hasEnumeratorName ? buffer : NULL;
+  return hasEnumeratorName ? std::string(buffer) : std::string();
 }
 
 std::string GetFriendlyName(HDEVINFO hDeviceInfo,
@@ -80,7 +81,7 @@ std::string GetFriendlyName(HDEVINFO hDeviceInfo,
     hDeviceInfo, &deviceInfoData, SPDRP_FRIENDLYNAME,
     NULL, (PBYTE) wbuffer, sizeof(wbuffer), NULL);
 
-  return hasFriendlyName ? WCharToUtf8(wbuffer) : std::string("");
+  return hasFriendlyName ? WCharToUtf8String(wbuffer) : std::string("");
 }
 
 bool IsSCSIDevice(std::string enumeratorName) {
@@ -156,7 +157,7 @@ bool IsSystemDevice(HDEVINFO hDeviceInfo, DeviceDescriptor *device) {
       folderId, 0, NULL, &folderPath);
 
     if (result == S_OK) {
-      std::string systemPath = WCharToUtf8(folderPath);
+      std::string systemPath = WCharToUtf8String(folderPath);
       // printf("systemPath %s\n", systemPath.c_str());
       for (std::string mountpoint : device->mountpoints) {
         // printf("%s find %s\n", systemPath.c_str(), mountpoint.c_str());
@@ -375,6 +376,71 @@ bool GetDeviceBlockSize(HANDLE hPhysical, DeviceDescriptor *device) {
   return false;
 }
 
+bool GetPartitionTableType(HANDLE hPhysical, DeviceDescriptor *device) {
+  // Works for up to 256 partitions (Windows only allows 128 for GPT partition
+  // tables anyway)
+  int lsize = sizeof(DRIVE_LAYOUT_INFORMATION_EX) + \
+    256 * sizeof(PARTITION_INFORMATION_EX);
+  DRIVE_LAYOUT_INFORMATION_EX *diskLayout;
+  diskLayout = reinterpret_cast<DRIVE_LAYOUT_INFORMATION_EX*>(new BYTE[lsize]);
+  DWORD diskLayoutSize = 0;
+  BOOL hasDiskLayout = DeviceIoControl(
+    hPhysical,
+    IOCTL_DISK_GET_DRIVE_LAYOUT_EX,
+    NULL,
+    0,
+    diskLayout,
+    lsize,
+    &diskLayoutSize,
+    NULL);
+  if (!hasDiskLayout) {
+    free(diskLayout);
+    return hasDiskLayout;
+  }
+  /*
+  diskLayout->PartitionStyle will never be PARTITION_STYLE_RAW, it will be
+  * PARTITION_STYLE_GPT for gpt partition tables
+  * PARTITION_STYLE_MBR for anything else: mbr partition tables, zeroes,
+  random data, raw partitions
+  The only way to differentiate a real mbr partition table from random data
+  is that for real mbr partition tables diskLayout->PartitionCount will be a
+  multiple of 4 and 1 for anything else.
+  See the table below.
+  *pe0 = PartitionEntry[0]
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | field \ partition table type | gpt                 | mbr with one part   | empty mbr           | zeroes              | random              | raw ext4 partition  | raw fat partition   |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------+----------------------+
+  | PartitionStyle               | PARTITION_STYLE_GPT | PARTITION_STYLE_MBR | PARTITION_STYLE_MBR | PARTITION_STYLE_MBR | PARTITION_STYLE_MBR | PARTITION_STYLE_MBR | PARTITION_STYLE_MBR |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | PartitionCount               |                   5 |                   4 |                   4 |                   1 |                   1 |                   1 |                   1 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | Mbr.Signature                |                  na |           600574350 |          1477769759 |                   1 |                   1 |                   1 |                   1 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.StartingOffset           |                  na |             1048576 |                   0 |                   0 |                   0 |                   0 |                   0 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.PartitionLength          |                  na |         31913410560 |                   0 |         31914983424 |         31914983424 |         31914983424 |         31914983424 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.PartitionNumber          |                  na |                   1 |                   0 |                   1 |                   1 |                   1 |                   1 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.Mbr.PartitionType        |                  na |                   7 |                   0 |                   4 |                   4 |                   4 |                   4 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.Mbr.BootIndicator        |                  na |                   0 |                   0 |                   0 |                   0 |                   0 |                   0 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.Mbr.RecognizedPartition  |                  na |                   1 |                   0 |                   1 |                   1 |                   1 |                   1 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  | pe0.Mbr.HiddenSectors        |                  na |                2048 |                   0 |                   0 |                   0 |                   0 |                   0 |
+  +------------------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+  */
+  if ((diskLayout->PartitionStyle == PARTITION_STYLE_MBR) &&
+      ((diskLayout->PartitionCount % 4) == 0)) {
+    device->partitionTableType = "mbr";
+  } else if (diskLayout->PartitionStyle == PARTITION_STYLE_GPT) {
+    device->partitionTableType = "gpt";
+  }
+  free(diskLayout);
+  return hasDiskLayout;
+}
+
 bool GetDeviceSize(HANDLE hPhysical, DeviceDescriptor *device) {
   DISK_GEOMETRY_EX diskGeometry;
 
@@ -552,6 +618,14 @@ bool GetDetailData(DeviceDescriptor* device,
       break;
     }
 
+    if (!GetPartitionTableType(hPhysical, device)) {
+      errorCode = GetLastError();
+      device->error = "Couldn't get disk partition table type: Error " +
+        std::to_string(errorCode);
+      result = false;
+      break;
+    }
+
     // printf("[INFO] GetAdapterInfo( %s )\n", device->raw.c_str());
 
     if (!GetAdapterInfo(hPhysical, device)) {
@@ -603,7 +677,7 @@ std::vector<DeviceDescriptor> ListStorageDevices() {
   std::vector<DeviceDescriptor> deviceList;
 
   DWORD i;
-  char *enumeratorName;
+  std::string enumeratorName;
   DeviceDescriptor device;
 
   hDeviceInfo = SetupDiGetClassDevsA(
@@ -620,16 +694,16 @@ std::vector<DeviceDescriptor> ListStorageDevices() {
   for (i = 0; SetupDiEnumDeviceInfo(hDeviceInfo, i, &deviceInfoData); i++) {
     enumeratorName = GetEnumeratorName(hDeviceInfo, deviceInfoData);
 
-    // printf("[INFO] Enumerating %s\n", enumeratorName);
+    // printf("[INFO] Enumerating %s\n", enumeratorName.c_str());
 
     // If it failed to get the SPDRP_ENUMERATOR_NAME, skip it
-    if (enumeratorName == NULL) {
+    if (enumeratorName.empty()) {
       continue;
     }
 
     device = DeviceDescriptor();
 
-    device.enumerator = std::string(enumeratorName);
+    device.enumerator = enumeratorName;
     device.description = GetFriendlyName(hDeviceInfo, deviceInfoData);
     device.isRemovable = IsRemovableDevice(hDeviceInfo, deviceInfoData);
     device.isVirtual = IsVirtualHardDrive(hDeviceInfo, deviceInfoData);
