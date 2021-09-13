@@ -25,7 +25,7 @@ public:
 
   ~DriveListWorker() {}
 
-  void Execute() {
+  void Execute() override {
     devices = Drivelist::ListStorageDevices();
   }
 
