@@ -31,7 +31,7 @@ for:
           only:
               - image: ubuntu
               - fast_finish: true
-          environmment:
+          environment:
             CCACHE_TEMPDIR: /tmp/.ccache-temp
             CCACHE_COMPRESS: 1
             CC: "clang"
@@ -55,7 +55,7 @@ for:
           only:
               - image: macos
               - fast_finish: true
-          environmment:
+          environment:
             CCACHE_TEMPDIR: /tmp/.ccache-temp
             CCACHE_COMPRESS: 1
             CC: "clang"
