@@ -15,7 +15,6 @@ cache:
 # what combinations to test
 environment:
   matrix:
-    fast_finish: true
     - nodejs_version: 14
   global:
   CCACHE_TEMPDIR: /tmp/.ccache-temp
