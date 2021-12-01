@@ -1,6 +1,6 @@
 {
   "name": "@lls/drivelist",
-  "version": "9.0.18",
+  "version": "9.0.19",
   "private": false,
   "description": "List all connected drives in your computer, in all major operating systems",
   "main": "js/index.js",
@@ -30,8 +30,8 @@
     "install": "prebuild-install || node-gyp rebuild",
     "prebuild-node": "prebuild -t 14.17.0 16.9.1 --strip",
     "prebuild-node-ia32": "prebuild -t 14.17.0 16.9.1 -a ia32 --strip",
-    "prebuild-electron": "prebuild -t 14.0.0 16.0.0 -r electron --strip",
-    "prebuild-electron-ia32": "prebuild -t 14.0.0 16.0.0 -r electron -a ia32 --strip",
+    "prebuild-electron": "prebuild -t 14.0.0 16.0.2 -r electron --strip",
+    "prebuild-electron-ia32": "prebuild -t 14.0.0 16.0.2 -r electron -a ia32 --strip",
     "prebuild-release": "npm run prebuild-electron",
     "prepublishOnly": "npm run build-ts && npm run readme"
   },
@@ -47,7 +47,7 @@
     "eslint": "7.4.0",
     "jsdoc-to-markdown": "6.0.1",
     "mocha": "8.0.1",
-    "node-abi": "3.0.0",
+    "node-abi": "3.5.0",
     "node-gyp": "^8.1.0",
     "prebuild": "10.0.1",
     "sinon": "9.0.2",
